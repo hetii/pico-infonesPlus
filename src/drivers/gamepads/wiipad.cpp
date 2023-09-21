@@ -29,6 +29,7 @@ Pin:    Function:
 #define WII_I2C i2c1
 #define WII_BAUDRATE 100000 // 400000
 #define WII_ADDR 0x52
+#define WII_PIN_SCS 22
 
 // According http://wiibrew.org/wiki/Wiimote/Extension_Controllers
 // there are two way to initialize the extension (pads in our case).
@@ -72,16 +73,20 @@ void wiipad_ext_init(void) {
     uint8_t init1[] = { 0xF0, 0x55 };
     uint8_t init2[] = { 0xFB, 0x00 };
     if (i2c_write_timeout_us(WII_I2C, WII_ADDR, init1, 2, false, 400) != sizeof init1){
-        // printf("Wiipad driver initialization failed on init1.\n");
+        printf("Wiipad driver initialization failed on init1.\n");
         return;
     }
     sleep_us(400);
     if (i2c_write_timeout_us(WII_I2C, WII_ADDR, init2, 2, false, 400) != sizeof init2){
-        // printf("Wiipad driver initialization failed on init2.\n");
+        printf("Wiipad driver initialization failed on init2.\n");
         return;
     }
 #endif
-
+    // uint8_t init3[] = { 0xFE, 0x02 };
+    // if (i2c_write_timeout_us(WII_I2C, WII_ADDR, init3, 2, false, 400) != sizeof init3){
+    //     printf("Wiipad driver initialization failed on init3.\n");
+    //     return;
+    // }
 }
 
 void wiipad_init(void) {
@@ -90,7 +95,16 @@ void wiipad_init(void) {
     gpio_set_function(WII_PIN_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(WII_PIN_SDA);
     gpio_pull_up(WII_PIN_SCL);
+
+    gpio_init(WII_PIN_SCS);
+    gpio_set_function(WII_PIN_SCS, GPIO_FUNC_SIO);
+    gpio_set_dir(WII_PIN_SCS, GPIO_OUT);
+    gpio_put(WII_PIN_SCS, false);
+
     wiipad_ext_init();
+    gpio_put(WII_PIN_SCS, true);
+    wiipad_ext_init();
+
     printf("Wiipad driver initialized.\n");
 }
 
@@ -98,14 +112,24 @@ void wiipad_init(void) {
 //   Add support for second pad.
 void wiipad_read(void) {
     uint32_t curr_data = 0;
-    static uint32_t prev_data = 0;
+    static uint32_t prev_data[2] = { 0 };
+    uint8_t buf[WII_BUFSIZE] = { 0 };
 
-    uint8_t req[1] = { 0x00 };
-    uint8_t buf[WII_BUFSIZE] = { 0x00 };
+    static uint8_t i = 0;
+
+    // On every call of this function another pad is selected,
+    // by changing state of this additional pin.
+    //
+    // I could use loop here and read both state in single call of wiipad_read, 
+    // but it seams some time must pass to complete the switching.
+    gpio_put(WII_PIN_SCS, i++);
+    if (i > 1) i = 0;
 
     // Check if device is still present on bus and send required byte to read state,
     // if fail then problably pad is disconnected and we should try to reinit it.
-    if (i2c_write_timeout_us(WII_I2C, WII_ADDR, req, sizeof req, false, 400) != sizeof req){
+    if (i2c_write_timeout_us(WII_I2C, WII_ADDR, buf, 1, false, 400) != 1){
+        //sleep_ms(1000);
+        //printf("Reinit on %d\n", i);
         wiipad_ext_init();
         return;
     }
@@ -149,18 +173,18 @@ void wiipad_read(void) {
             return;
         }
 
-        auto &gp = io::getCurrentGamePadState(0);
+        auto &gp = io::getCurrentGamePadState(i);
         // Only set once gb.buttons if new data arrive in this driver.
         // This logic is needed to avoid clearing gp.buttons value that
         // can be already set by other gamepad in the system.
-        if (prev_data != curr_data){
-            prev_data = curr_data;
+        if (prev_data[i] != curr_data){
+            prev_data[i] = curr_data;
             gp.buttons = curr_data;
 
-            // for(uint8_t i=0; i<sizeof buf; i++)
+            // for(uint8_t y=0; y<sizeof buf; y++)
             // {
-            //     if (i%16 == 0) printf("\r\n  ");
-            //     printf(" %02X:%ld ", buf[i], buf[i]);
+            //     if (y%16 == 0) printf("\r\n  ");
+            //     printf("Pad %d: %02X:%ld ", i, buf[y], buf[y]);
             // }
             // printf("\r\n");
             // printf("UP     is %s\n", (curr_data & io::GamePadState::Button::UP) ? "on" : "off");

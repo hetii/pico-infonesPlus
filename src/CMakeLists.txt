@@ -97,8 +97,8 @@ elseif ( INFONES_PLUS_HW_CONFIG EQUAL 2 )
 	set(NES_DATA "7" CACHE STRING "Select the Data GPIO pin for NES controller")
     set(NES_DATA2 "9" CACHE STRING "Select the Data GPIO pin for second NES controller")
 	set(NES_LAT "8" CACHE STRING "Select the Latch GPIO pin for NES controller")
-	set(WII_SDA "-1" CACHE STRING "Select the SDA GPIO pin for Wii Classic controller")
-	set(WII_SCL "-1" CACHE STRING "Select the SCL GPIO pin for Wii Classic controller")
+	set(WII_SDA "26" CACHE STRING "Select the SDA GPIO pin for Wii Classic controller")
+	set(WII_SCL "27" CACHE STRING "Select the SCL GPIO pin for Wii Classic controller")
 
 elseif ( INFONES_PLUS_HW_CONFIG EQUAL 3 )
 	# --------------------------------------------------------------------
